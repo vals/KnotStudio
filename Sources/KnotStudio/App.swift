@@ -165,7 +165,7 @@ struct ContentView: View {
             Grid(horizontalSpacing: 6, verticalSpacing: 6) {
                 GridRow {
                     Text("").frame(width: 46)
-                    ForEach(Region.allCases, id: \.self) { region in
+                    ForEach([Region.L, .C, .R], id: \.self) { region in
                         Text(region == .L ? "left" : (region == .R ? "right" : "centre")).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
@@ -291,6 +291,9 @@ struct ContentView: View {
             .font(.caption).foregroundStyle(Color.white.opacity(0.55)).padding(.horizontal, 22).padding(.vertical, 14)
         }
         .background(stage)
+        // The window is light (for the paper sidebar) but the stage is dark;
+        // its controls need the dark appearance to stay legible.
+        .environment(\.colorScheme, .dark)
     }
 
     private var statusLine: String {
@@ -384,6 +387,11 @@ final class SelfTest {
         log.append(String(format: "live frames stepped: %d over %.1f s of motion (%.0f per second)", c.liveFrames, c.liveSeconds, Double(c.liveFrames) / max(c.liveSeconds, 1e-3)))
         log.append(String(format: "simulation + meshing: mean %.3f ms, worst %.3f ms per frame", c.liveMillisTotal / Double(frames), c.liveMillisWorst))
         try? log.joined(separator: "\n").write(to: directory.appendingPathComponent("selftest.txt"), atomically: true, encoding: .utf8)
+        // The interface itself (the 3D view is captured separately above).
+        if let content = NSApp.windows.first?.contentView, let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) {
+            content.cacheDisplay(in: content.bounds, to: bitmap)
+            try? bitmap.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent("window.png"))
+        }
         NSApp.terminate(nil)
     }
 }
