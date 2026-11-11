@@ -2,6 +2,14 @@
 
 A native macOS app (SwiftUI + SceneKit) that ties any necktie knot from its Fink–Mao notation, in real time, one move at a time. Type `Li Ro Li Co T`, press the move buttons, or scrub through a named knot and watch the wide end go across, behind, over the top and through.
 
+| Four-in-hand | Windsor | The tuck |
+| --- | --- | --- |
+| ![Four-in-hand being tied](docs/media/four-in-hand.gif) | ![Windsor being tied](docs/media/windsor.gif) | ![The wide end threaded under the band](docs/media/tuck.gif) |
+
+| Inside-out start (Pratt), faces view | Cloth weight | All round |
+| --- | --- | --- |
+| ![Pratt with front and back faces coloured](docs/media/pratt-inside-out.gif) | ![Fine silk, wool and twill](docs/media/cloth.gif) | ![Turntable of a Windsor](docs/media/turntable.gif) |
+
 It replaces the earlier approach (hand-authored presets plus a physical cloth solver), which is kept untouched in [Legacy/](Legacy/README.md).
 
 ## Run
@@ -64,6 +72,12 @@ build/KnotStudio.app/Contents/MacOS/KnotStudio --selftest "$PWD/artifacts/selfte
 ```
 
 Runs the real app through a short tying session, saves what the view shows at each stage and writes frame timings to `selftest.txt`.
+
+```sh
+zsh Scripts/gifs.sh
+```
+
+Re-renders the GIFs above into `docs/media` (needs ffmpeg).
 
 ## Known limits
 
