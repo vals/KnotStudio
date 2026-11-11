@@ -1,0 +1,12 @@
+# Build products
+.build/
+build/
+Legacy/build/
+
+# Generated review output (large, reproducible); release archives stay on disk
+Legacy/artifacts/
+artifacts/selftest/
+*.zip
+
+.DS_Store
+__pycache__/

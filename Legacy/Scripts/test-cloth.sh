@@ -1,0 +1,7 @@
+#!/bin/zsh
+set -euo pipefail
+cd "${0:A:h}/.."
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Library/Developer/CommandLineTools}"
+mkdir -p .build/module-cache artifacts/cloth-0.5
+/usr/bin/xcrun swiftc -O -module-cache-path "$PWD/.build/module-cache" Sources/KnotCore/*.swift Tests/ClothChecks.swift -o .build/cloth-checks
+.build/cloth-checks | tee artifacts/cloth-0.5/checks.txt
