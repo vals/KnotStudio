@@ -10,3 +10,7 @@ artifacts/selftest/
 
 .DS_Store
 __pycache__/
+
+# Kept locally, not published: third-party paper copy and old delivery receipts
+Legacy/docs/references/
+Legacy/deliverables/
