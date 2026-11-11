@@ -86,3 +86,7 @@ Re-renders the GIFs above into `docs/media` (needs ffmpeg).
 - The collar is a plain shape with no shirt; while tying it stands up, which fills the background of the close view.
 - A finished knot is dressed by rule (folds drawn in, band raised to cover the top, taper from the knot’s bulk), not by solving for tension. From above it is an open cup.
 - Only the classical final tuck is supported, by choice: knots that tuck under earlier bands are out of scope.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
