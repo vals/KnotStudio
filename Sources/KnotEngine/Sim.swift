@@ -47,6 +47,8 @@ final class KnotSim {
     private var tuckAmount = 0.0
     private var narrow = 38.0
     private var lead = 0.0
+    private var dress = 0.0
+    private var bandWidth = 3.9
     private var fixedLength = 47.0
     /// Current length of the narrow end below the knot, cm.
     var narrowEnd: Double { narrow }
@@ -97,14 +99,19 @@ final class KnotSim {
         spread = mix(spread, params.layerSpread, rate)
         let scale = 1 + 0.55 * loose
         layer = (0.15 + 0.45 * loose) * spread
-        let goalLayout = Layout.make(shown, scale: scale)
+        // Dressing: once the tuck is through, the knot is drawn snug. Loosening
+        // it with the tightness control opens it back up to show its structure.
+        let through = shown.tuck && progress > Double(2 * shown.moves.count) + 0.9
+        let dressGoal = through ? smoothstep(0.35, 0.75, 1 - loose) : 0.0
+        dress = started ? mix(dress, dressGoal, 1 - exp(-dt / 0.30)) : (shown.tuck ? smoothstep(0.35, 0.75, 1 - loose) : 0)
+        let goalLayout = Layout.make(shown, scale: scale, dress: dress, bandWidth: bandWidth, layer: layer)
         if started { lay.ease(toward: goalLayout, rate: rate) } else { lay = goalLayout }
         let crossGoal = shown.moves.isEmpty ? 0.0 : 1.0
         cross = started ? mix(cross, crossGoal, 1 - exp(-dt / 0.16)) : crossGoal
         path = WoundPath(layout: lay, layer: layer)
         var narrowGoal = params.narrowEnd
         if params.autoBalance {
-            let fullLayout = Layout.make(fullProgram ?? goal, scale: scale)
+            let fullLayout = Layout.make(fullProgram ?? goal, scale: scale, dress: dress, bandWidth: bandWidth, layer: layer)
             let wound = WoundPath(layout: fullLayout, layer: layer).length(upTo: fullLayout.restProgress)
             narrowGoal = (TieBlank.length - fixedLength - wound - 5) / 2
         }
@@ -135,13 +142,15 @@ final class KnotSim {
         shape.radiusX = lay.halfWidth + 1.3
         shape.radiusY = (lay.yTop - lay.yBottom) / 2 + 0.9
         shape.bulge = 1.25 * cross
-        shape.taper = 0.16 * cross
+        shape.taperLeft = lay.taperLeft * cross
+        shape.taperRight = lay.taperRight * cross
         shape.mirror = lay.mirrored
         mesh.build(rows: rows, shape: shape)
 
         let easing = lay.distance(to: goalLayout) > 2e-3 || abs(cross - crossGoal) > 2e-3
             || abs(loose - (1 - params.tightness)) > 2e-3 || abs(spread - params.layerSpread) > 2e-3
             || abs(tuckAmount - tuckGoal) > 2e-3 || abs(narrow - narrowGoal) > 2e-3 || lead > 2e-3
+            || abs(dress - dressGoal) > 2e-3
         isMoving = !started || easing || abs(progress - target) > 1e-6 || shown != goal || tailSpeed > 0.6
         started = true
     }
@@ -278,11 +287,14 @@ final class KnotSim {
             for piece in 0..<path.pieceCount where Double(piece) < progress {
                 let fraction = min(1, progress - Double(piece))
                 let length = path.pieceLength(piece)
-                let steps = piece % 2 == 0
-                    ? max(1, Int((length * fraction / 0.4).rounded(.up)))
-                    : max(2, Int((8 * fraction).rounded(.up)))
-                for k in 0..<steps {
-                    let f = fraction * Double(k) / Double(steps)
+                let fractions: [Double]
+                if piece % 2 == 0 {
+                    let steps = max(1, Int((length * fraction / 0.4).rounded(.up)))
+                    fractions = (0..<steps).map { fraction * Double($0) / Double(steps) }
+                } else {
+                    fractions = path.rollFractions(piece).filter { $0 < fraction - 1e-9 }
+                }
+                for f in fractions {
                     let s = s0 + before + f * length
                     if s > TieBlank.length { break }
                     let frame = path.eval(piece: piece, frac: f)
@@ -306,6 +318,10 @@ final class KnotSim {
         let wv = TieBlank.width(anchorS), wr = min(wv, anchor.cap)
         rows.append(Row(c: anchor.p, t: anchor.t, a: anchor.a, n: anchor.n, kappa: anchor.kappa, s: anchorS, wv: wv, wr: wr, chord: wr, dimple: 0.3 * tuckAmount))
         shirtZ = -((lay.depths.max() ?? 1) + 1.5) * layer - 0.4
+        if let band = lay.bandChord, band < path.chords.count {
+            let middle = s0 + path.length(upTo: Double(2 * band) + 0.5)
+            bandWidth = min(TieBlank.width(middle), (path.chords[band].cap0 + path.chords[band].cap1) / 2)
+        }
     }
 
     // MARK: Free end

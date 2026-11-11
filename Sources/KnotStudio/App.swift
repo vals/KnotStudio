@@ -358,7 +358,10 @@ final class SelfTest {
             guard let model = StudioModel.current, !model.windowVisible else { return }
             self.log.append("window not visible: frames driven by a 60 Hz timer instead of the display")
             let controller = model.controller
-            Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { _ in controller.tick(CACurrentMediaTime()) }
+            Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { _ in
+                // Only while hidden; once the display drives frames, stay out of its way.
+                MainActor.assumeIsolated { if !model.windowVisible { controller.tick(CACurrentMediaTime()) } }
+            }
         }
         run(0)
     }

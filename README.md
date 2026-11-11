@@ -20,6 +20,7 @@ open build/KnotStudio.app
 
 - **Notation field** — any sequence of `Li Lo Ri Ro Ci Co`, optionally ending in `T`. Case, spaces and `⊗/⊙` are accepted. Text that is only partly valid still shows the knot up to the last valid move, with a note about what is wrong.
 - **Next move** — the six move buttons and `T`; only moves that can legally follow are enabled. Undo and Clear step back.
+- **Finishing** — when the tuck goes through, the knot cinches into its dressed shape; lower Tightness to open it back up and see the structure.
 - **Timeline** — one chip per move. Click a chip to show the knot as it stands after that move; `∅` is the untied tie. “Tie from the start” replays the whole sequence.
 - **Named knots** — the fourteen named Fink–Mao knots. Sequences outside the classical rules (other endings, first move to the right, more than nine moves) work too and are labelled off-catalogue.
 - **Fabric** — stripes, dots, windowpane, solid, or an imported swatch, with repeat width, offset and angle measured on the flat cloth.
@@ -67,5 +68,5 @@ Runs the real app through a short tying session, saves what the view shows at ea
 
 - Folds are sharp creases and panels are flat; the cushioning, taper and dimple are shaping applied afterwards. Real knots bunch and wrinkle.
 - While a move is in progress the wide end is led straight along its direction of travel and then released; it does not model a hand, and the tuck passes through the front band rather than being threaded.
-- The top of the knot shows the fold-over panels more plainly than a dressed knot would.
+- A finished knot is dressed by rule (folds drawn in, band raised to cover the top, taper from the knot’s bulk), not by solving for tension. From above it is an open cup.
 - No collar or shirt. Tuck variants beyond the final `T` (Eldredge, Trinity and similar) are not in the notation yet.

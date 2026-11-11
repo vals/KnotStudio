@@ -26,7 +26,7 @@ Because the order is known, nothing has to be detected, separated or untangled, 
 
 A ribbon folded flat along a straight crease has its direction reflected in the crease. Conversely, for any two chord directions there is exactly one crease that joins them: the bisector. `WoundPath` uses this for every fold, so each chord is a flat, unstretched panel of the tie’s own fabric and the fold is a roll of small radius around the crease line (a helix, since the centreline meets the crease obliquely). Rows of the mesh are sheared to lie along the creases, so a row never straddles a fold.
 
-The result is an isometric map from the flat tie to the knot: stripes turn exactly where the cloth turns and flip where it flips. Layer spacing sets the roll radius, so later folds wrap around earlier ones.
+The result is an isometric map from the flat tie to the knot: stripes turn exactly where the cloth turns and flip where it flips. Layer spacing sets how far a fold reaches across the stack, so later folds wrap around earlier ones. Cloth folds flat rather than round, so a fold’s section is an ellipse: it spans the full thickness of the layers it encloses but bulges past its crease by at most about two layer spacings.
 
 Where the tie is wider than the knot allows, the surplus is rolled under at the edges (a flat middle, a tight roll, and a hem underneath), which is also what gives the edges their thickness. Texture stays at true scale on the visible part.
 
@@ -39,23 +39,33 @@ Where the tie is wider than the knot allows, the surplus is rolled under at the 
 
 Everything else — fold points, depths, tightness — eases toward its target, so changes are continuous.
 
-## 5. Shaping
+## 5. Dressing
+
+While a knot is being tied the layout is open and diagram-like, so each pass can be read. When the tuck goes through, the knot is drawn snug (`dress` goes from 0 to 1 over about a third of a second):
+
+- the folds over the top drop toward the crossing, as far as the strands under them allow;
+- the front band rises just enough for its upper edge to cover those folds, and the inner wraps are drawn up level with it and gathered so they hide behind it;
+- the taper toward the bottom follows the knot’s bulk: every pass around a neck strand adds to the shoulder on that side, so a Windsor becomes a wide triangle and a four-in-hand stays a narrow, slightly lopsided trapezoid.
+
+This is tension expressed as its outcome — where each fold ends up when pulled in as far as the cloth beneath lets it — not a force computation. Lowering the tightness control undoes it and opens the knot up again.
+
+## 6. Shaping
 
 The folded stack is flat. A single smooth map of space is applied to every vertex: depth is scaled up toward the middle of the knot (a cushion) and width is tapered toward the bottom. It only rescales depth and width, so it cannot reorder layers. The blade below the knot is cupped and dimpled in its cross-section.
 
-## 6. Cost
+## 7. Cost
 
 About 300 rows × 15 vertices, two faces: ~18k triangles, rebuilt every frame. One step (layout, path, chain, mesh) is ~0.4 ms on an M4 Pro; a 120 Hz frame is 8.3 ms. When nothing is moving the view stops redrawing.
 
-## 7. What is checked
+## 8. What is checked
 
 `Tests/Checks.swift` enumerates the 85 Fink–Mao knots from the rules and, for each at every step of tying, verifies on the built geometry that:
 
 - each move crosses exactly the strand in the table above, on the side the notation gives;
 - chords stack outward in order and the tuck lies directly under its band;
 - every fold is a reflection (error < 0.02 in direction);
-- the centreline is not stretched (worst 0.6 %).
+- the centreline is not stretched (worst 2.4 % between neighbouring rows, at the sharpest folds).
 
-## 8. Where it is wrong on purpose
+## 9. Where it is wrong on purpose
 
-Creases are sharp, panels are flat, and cloth does not bunch. Fold points are placed by rule, not by tension, so proportions are plausible rather than measured. The tuck passes through the band instead of being threaded tip-first. Good next steps: tension-based placement of the fold points, a collar, per-fabric thickness, and the extended tuck notation for knots like the Eldredge.
+Creases are sharp, panels are flat, and cloth does not bunch. Fold points are placed by rule (see Dressing), so proportions are plausible rather than measured. The tuck passes through the band instead of being threaded tip-first, and seen from above the dressed knot is an open cup rather than a closed bundle. Good next steps: a collar, a threaded tuck, per-fabric thickness, and the extended tuck notation for knots like the Eldredge.

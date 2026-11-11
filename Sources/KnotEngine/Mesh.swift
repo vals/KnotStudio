@@ -15,7 +15,8 @@ final class RibbonMesh {
         var radiusX = 2.8
         var radiusY = 3.2
         var bulge = 1.2
-        var taper = 0.16
+        var taperLeft = 0.16
+        var taperRight = 0.16
         var mirror = false
         @inline(__always) func apply(_ p: V3) -> V3 {
             let u = (p.y - yCenter) / radiusY
@@ -23,6 +24,7 @@ final class RibbonMesh {
             let r2 = u * u + v * v
             var q = p
             if r2 < 1 { let f = 1 - r2; q.z *= 1 + bulge * f * f }
+            let taper = mix(taperLeft, taperRight, smoothstep(-0.8, 0.8, p.x))
             q.x *= 1 + taper * 1.6 * u * exp(-u * u)
             return q
         }

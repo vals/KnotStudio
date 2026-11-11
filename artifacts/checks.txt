@@ -1,4 +1,4 @@
-geometry: 854 knot states checked; worst centreline stretch 0.64%, worst fold error 0.0000
+geometry: 854 knot states checked; worst centreline stretch 2.40%, worst fold error 0.0000
 live tying: every Windsor step forward and back comes to rest; slowest 4.8 s (to “Li Co Ri Lo Ci Ro Li”)
-speed: 3600 steps, mean 0.394 ms, worst 0.452 ms, 18032 triangles (a 120 Hz frame is 8.3 ms)
+speed: 3600 steps, mean 0.456 ms, worst 0.974 ms, 18368 triangles (a 120 Hz frame is 8.3 ms)
 ALL CHECKS PASSED
