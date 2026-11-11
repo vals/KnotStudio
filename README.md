@@ -2,6 +2,18 @@
 
 A native macOS app (SwiftUI + SceneKit) that ties any necktie knot from its Fink–Mao notation, in real time, one move at a time. Type `Li Ro Li Co T`, press the move buttons, or scrub through a named knot and watch the wide end go across, behind, over the top and through.
 
+![Building a four-in-hand one move at a time](docs/media/app-build.gif)
+
+Typing a sequence ties it as you go; half-typed text shows the knot so far and says what is missing:
+
+![Typing the Windsor's notation](docs/media/app-type.gif)
+
+Cloth, pattern, the front/back faces view, and stepping back through the timeline:
+
+![Changing cloth and display, then stepping back](docs/media/app-explore.gif)
+
+Close-ups of the model:
+
 | Four-in-hand | Windsor | The tuck |
 | --- | --- | --- |
 | ![Four-in-hand being tied](docs/media/four-in-hand.gif) | ![Windsor being tied](docs/media/windsor.gif) | ![The wide end threaded under the band](docs/media/tuck.gif) |
@@ -77,7 +89,7 @@ Runs the real app through a short tying session, saves what the view shows at ea
 zsh Scripts/gifs.sh
 ```
 
-Re-renders the GIFs above into `docs/media` (needs ffmpeg).
+Re-renders the GIFs above into `docs/media` (needs ffmpeg). The interface ones come from `KnotStudio --record <dir>`, which plays scripted sessions in the real window on a fixed clock and saves every frame.
 
 ## Known limits
 

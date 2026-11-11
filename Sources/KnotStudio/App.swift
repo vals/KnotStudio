@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let index = CommandLine.arguments.firstIndex(of: "--selftest"), index + 1 < CommandLine.arguments.count {
             SelfTest(directory: CommandLine.arguments[index + 1]).start()
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--record"), index + 1 < CommandLine.arguments.count {
+            NSApp.windows.first?.setContentSize(NSSize(width: 1180, height: 800))
+            Recorder(directory: CommandLine.arguments[index + 1]).start()
+        }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }

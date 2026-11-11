@@ -89,6 +89,11 @@ final class StudioModel: ObservableObject {
         return true
     }
 
+    /// For the recorder: the 3D view, and a way to refresh the status line
+    /// when the model is being stepped by hand.
+    var sceneView: SCNView? { view }
+    func show(stats: SimStats) { self.stats = stats }
+
     /// Snapshot of the live view, exactly as displayed.
     func snapshotPNG() -> Data? { view.flatMap { KnotSceneController.png($0.snapshot()) } }
 

@@ -198,6 +198,7 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         let start = DispatchTime.now().uptimeNanoseconds
         sim.step(dt)
         let millis = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+        if externalClock { smoothedMillis = smoothedMillis == 0 ? millis : smoothedMillis * 0.9 + millis * 0.1 }
         ribbon.geometry = makeGeometry()
         refreshCollar()
         publishExtents()
@@ -213,7 +214,18 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         publishExtents()
     }
 
-    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) { tick(time) }
+    /// When set, redraws do not step the model; whoever set it calls `advance`.
+    /// Used to record the interface at a fixed frame rate.
+    var externalClock = false
+
+    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        if !externalClock { tick(time) }
+    }
+
+    var currentStats: SimStats {
+        SimStats(stepMillis: smoothedMillis, triangles: sim.mesh.triangleCount, moving: sim.isMoving,
+                 shownSteps: sim.shown.stepCount, freeLength: sim.freeLength, narrowEnd: sim.narrowEnd)
+    }
 
     /// One frame of the live loop. SceneKit calls this before each redraw.
     func tick(_ time: TimeInterval) {

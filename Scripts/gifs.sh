@@ -23,3 +23,14 @@ gif turntable "Li Co Ri Lo Ci Ro Li Co T" from="Li Co Ri Lo Ci Ro Li Co T" recor
   at=2.4:display=faces at=4.8:display=fabric orbit=32
 gif cloth "Li Ro Ci Lo Ri Co T" from="Li Ro Ci Lo Ri Co T" record=7 size=480 zoom=8 lift=-1 \
   at=0.3:cloth=finesilk at=2.5:cloth=wool at=4.8:cloth=silktwill
+
+# The whole interface, recorded from the real app playing scripted sessions.
+zsh Scripts/build.sh > /dev/null
+build/KnotStudio.app/Contents/MacOS/KnotStudio --record "$TMP/app" > /dev/null 2>&1
+for session in "$TMP"/app/*(/); do
+  name=${session:t}
+  ffmpeg -loglevel error -y -framerate 15 -i "$session/f%04d.png" \
+    -vf "scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=200:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+    "$OUT/$name.gif"
+  print "$OUT/$name.gif  $(du -h "$OUT/$name.gif" | cut -f1)"
+done
