@@ -44,8 +44,10 @@ final class StudioModel: ObservableObject {
         StudioModel.current = self
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            nonisolated(unsafe) let event = event
-            return MainActor.assumeIsolated { self.intercept(event) }
+            // Key events arrive on the main thread.
+            nonisolated(unsafe) let incoming = event
+            let swallowed = MainActor.assumeIsolated { self.intercept(incoming) == nil }
+            return swallowed ? nil : event
         }
     }
 

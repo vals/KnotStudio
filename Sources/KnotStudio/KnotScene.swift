@@ -48,13 +48,12 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
     private(set) var liveMillisTotal = 0.0
     private(set) var liveMillisWorst = 0.0
     private(set) var liveSeconds = 0.0
-    private(set) var liveRepeats = 0
-    private(set) var liveFast = 0
     private var statsTick = 0
     var onStats: ((SimStats) -> Void)?
     /// Called on the main thread when the model starts or stops moving.
     var onActivity: ((Bool) -> Void)?
 
+    private static let collarCategory = 2
     static let background = NSColor(srgbRed: 0.075, green: 0.095, blue: 0.12, alpha: 1)
 
     override init() {
@@ -69,6 +68,10 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         collarMaterial.roughness.contents = 0.9
         collarMaterial.metalness.contents = 0.0
         collarMaterial.isDoubleSided = true
+        // The collar has its own unshadowed key light: the shadow pass is tuned
+        // for the tie's closely stacked layers and speckles on a broad surface.
+        collarNode.castsShadow = false
+        collarNode.categoryBitMask = Self.collarCategory
 
         for material in [frontMaterial, backMaterial] {
             material.lightingModel = .physicallyBased
@@ -85,9 +88,6 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         let camera = SCNCamera()
         camera.usesOrthographicProjection = true
         camera.zNear = 0.1; camera.zFar = 400
-        camera.screenSpaceAmbientOcclusionIntensity = 0.9
-        camera.screenSpaceAmbientOcclusionRadius = 0.9
-        camera.screenSpaceAmbientOcclusionBias = 0.03
         cameraNode.camera = camera
         scene.rootNode.addChildNode(cameraNode)
 
@@ -101,7 +101,7 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         _ = light(.ambient, 330, SCNVector3Zero, .white)
         let key = light(.directional, 820, SCNVector3(-9, 14, 22), NSColor(srgbRed: 1, green: 0.94, blue: 0.86, alpha: 1))
         key.light?.castsShadow = true
-        key.light?.shadowMode = .deferred
+        key.light?.shadowMode = .forward
         key.light?.shadowColor = NSColor.black.withAlphaComponent(0.42)
         key.light?.shadowRadius = 5
         key.light?.shadowSampleCount = 12
@@ -109,6 +109,9 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         key.light?.orthographicScale = 14
         key.light?.shadowBias = 9
         key.light?.zNear = 1; key.light?.zFar = 120
+        key.light?.categoryBitMask = ~Self.collarCategory
+        let plainKey = light(.directional, 820, SCNVector3(-9, 14, 22), NSColor(srgbRed: 1, green: 0.94, blue: 0.86, alpha: 1))
+        plainKey.light?.categoryBitMask = Self.collarCategory
         _ = light(.omni, 260, SCNVector3(12, -2, 14), NSColor(srgbRed: 0.74, green: 0.85, blue: 1, alpha: 1))
         _ = light(.omni, 420, SCNVector3(-6, 6, -30), .white)
 
@@ -215,8 +218,6 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
     /// One frame of the live loop. SceneKit calls this before each redraw.
     func tick(_ time: TimeInterval) {
         let dt = lastTime.map { min(max(time - $0, 0), 0.1) } ?? 1.0 / 60
-        if dt < 1e-4 { liveRepeats += 1 }
-        if dt > 0.001 && dt < 0.0065 { liveFast += 1 }
         lastTime = time
         lock.lock(); let mail = pendingGoal != nil || pendingParams != nil; lock.unlock()
         if !sim.isMoving && !mail {

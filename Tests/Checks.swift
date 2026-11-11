@@ -157,8 +157,8 @@ struct Checks {
             expect(widths[1] > widths[0] + 0.1, "\(knot.name): wool should tie a wider knot than fine silk")
         }
 
-        // The tuck is threaded: partway through, the wide end forms a bight in
-        // front of the band, and it ends hanging below the knot.
+        // The tuck is threaded: partway through, the wide end stands in a bight
+        // above the knot, and it ends hanging below it.
         let threader = KnotSim()
         threader.goal = KnotProgram("Li Ro Li Co")
         threader.settle()
@@ -167,8 +167,9 @@ struct Checks {
         while time < 8 && (threader.isMoving || time < 0.2) {
             threader.step(1.0 / 60); time += 1.0 / 60
             let free = threader.rows.filter { $0.s > threader.anchorS }
-            // A bight: cloth heading back up, patterned face turned away.
-            let bight = free.contains { $0.t.y > 0.9 && $0.n.z < -0.9 }
+            // A bight above the knot: cloth coming back down, face forward,
+            // well above the top of the knot.
+            let bight = free.contains { $0.t.y < -0.7 && $0.n.z > 0.9 && $0.c.y > threader.layout.yTop + 3 }
             if bight { sawBight = true }
             for i in 1..<max(free.count, 1) where bight && free[i].s - free[i - 1].s > 0.2 {
                 let stretch = simd_distance(free[i].c, free[i - 1].c) / (free[i].s - free[i - 1].s)
@@ -177,7 +178,7 @@ struct Checks {
                 expect(stretch < 1.15, "threading: free end stretched by \(stretch)")
             }
         }
-        expect(sawBight, "threading the tuck should pass through a bight in front of the band")
+        expect(sawBight, "threading the tuck should pass through a bight above the knot")
         expect(!threader.isMoving && threader.shown.tuck, "threading should finish and come to rest")
         expect(threader.collarFold == 1, "the collar should be down once the knot is dressed")
 

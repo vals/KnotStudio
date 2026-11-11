@@ -7,8 +7,11 @@ import simd
 ///  1. the narrow end and neck loop are a fixed spline;
 ///  2. the wound part is the exact folded path given by the notation
 ///     (`WoundPath`), revealed up to `progress`;
-///  3. the free wide end is a short chain of particles that hangs, swings and
-///     is carried around the knot as moves are added or removed.
+///  3. the free wide end is a short chain of particles that hangs and swings;
+///     while a move is in progress it is led around the knot, and for the
+///     tuck it is threaded under the front band along a drawn path.
+/// A finished knot is then dressed: drawn snug, raised to the collar, and the
+/// collar folded down.
 /// The whole thing is re-meshed every step; a step costs well under a
 /// millisecond, so it runs at display rate with a large margin.
 final class KnotSim {
@@ -49,8 +52,8 @@ final class KnotSim {
     private var lead = 0.0
     private var dress = 0.0
     private var weight = 1.0
-    /// Threading the tuck: length of the bight still hanging in front of the
-    /// band, or nil when the wide end is not being fed through.
+    /// Threading the tuck: height of the bight still standing above the knot,
+    /// or nil when the wide end is not being fed through.
     private var threadLoop: Double?
     private var snapTail = false
     private(set) var neck = NeckRing()
@@ -82,9 +85,6 @@ final class KnotSim {
         pose = tp
     }
 
-    /// Free-end particles from the knot outward (for checks and debugging).
-    var tailPoints: [V3] { (0..<active).reversed().map { pose[$0] } }
-    var anchorFrame: WoundPath.Frame { anchor }
     var layout: Layout { lay }
     var woundPath: WoundPath { path }
 
@@ -196,29 +196,32 @@ final class KnotSim {
         return false
     }
 
-    /// Moves along the wound path, except for the tuck: that last chord is not
-    /// laid down from the top. The wide end is lifted, its tip is fed under the
-    /// band, and the cloth is drawn through until the bight in front is gone.
+    /// Moves along the wound path, except for the tuck. The wide end, having
+    /// come up behind the knot, is not folded over and laid down: it stays up,
+    /// its tip is turned forward and fed under the band from above, and the
+    /// cloth is drawn through until the bight above the knot has closed onto
+    /// the top fold.
     private func advanceOrThread(_ dt: Double) {
-        let folded = Double(2 * shown.moves.count)
-        guard shown.tuck, path.pieceCount == 2 * shown.moves.count + 1 else {
+        let count = shown.moves.count
+        guard shown.tuck, count > 0, path.pieceCount == 2 * count + 1 else {
             threadLoop = nil
             advance(dt, to: target)
             return
         }
-        let free = freeLength
-        let speed = 22 * params.speed
-        if target > folded {
-            if progress < folded - 1e-9 { advance(dt, to: folded); return }
-            if progress >= folded + 1 - 1e-9 { return }
-            progress = folded
-            let loop = (threadLoop ?? free) - speed * dt
-            if loop <= 0 { threadLoop = nil; progress = folded + 1; snapTail = true } else { threadLoop = loop }
-        } else if progress > folded + 1e-9 || threadLoop != nil {
-            progress = folded
-            let loop = (threadLoop ?? 0) + speed * dt
-            threadLoop = loop >= free ? nil : loop
-            if threadLoop == nil { snapTail = true }
+        // Threading starts from the end of the last chord, before the top fold.
+        let base = Double(2 * count - 1), done = Double(2 * count + 1)
+        let free = TieBlank.length - woundStartS - path.length(upTo: base)
+        let speed = 30 * params.speed
+        if target > base + 1 {
+            if progress >= done - 1e-9 { return }
+            if threadLoop == nil && abs(progress - base) > 1e-9 { advance(dt, to: base); return }
+            progress = base
+            let loop = (threadLoop ?? free / 2) - speed * dt / 2
+            if loop <= 0 { threadLoop = nil; progress = done; snapTail = true } else { threadLoop = loop }
+        } else if progress > base + 1 + 1e-9 || threadLoop != nil {
+            progress = base
+            let loop = (threadLoop ?? 0) + speed * dt / 2
+            threadLoop = loop >= free / 2 ? nil : loop
         } else {
             advance(dt, to: target)
         }
@@ -309,7 +312,9 @@ final class KnotSim {
             let away = max(0, simd_distance(p, center) - 2.4 * sc)
             // Gathered where it passes through the knot, and kept slim just below
             // it so the narrow end stays hidden behind the blade.
-            let cap = 2.1 + 0.22 * away + 3 * (1 - g)
+            var cap = 2.1 + 0.22 * away + 3 * (1 - g)
+            // Under a folded collar the band around the neck is gathered a little.
+            cap = min(cap, mix(cap, 2.5, collarFold * smoothstep(-1.2, -2.6, p.z)))
             rows.append(Row(c: p, t: t, a: simd_cross(t, n), n: n, kappa: 0, s: s, wv: wv, wr: min(wv, cap), chord: min(wv, cap), dimple: 0))
         }
         s += simd_distance(end, chain[chain.count - 1])
@@ -495,45 +500,61 @@ final class KnotSim {
         return unit(a * (sin((1 - w) * angle) / sine) + b * (sin(w * angle) / sine))
     }
 
-    /// The free end while it is being threaded, as one continuous strip: down
-    /// the front of the band, up again in a bight, over into the top of the
-    /// band, under it, and out below. `threadLoop` is the length of the front
-    /// leg; as it shrinks the tip climbs, dives under the band and the cloth
-    /// follows until none is left in front.
+    /// The free end while it is being threaded, as one continuous strip: up
+    /// from behind the knot, over in a bight, down into the top of the band,
+    /// under it and out below. `threadLoop` is the height of the bight; as it
+    /// shrinks the tip comes down, dives under the band and the cloth follows,
+    /// until the bight has become the fold over the top of the knot.
     private func buildThread() {
-        guard let leg = threadLoop, path.pieceCount > 0 else { return }
-        let piece = path.pieceCount - 1
-        let under = path.pieceLength(piece)
-        let entry = path.eval(piece: piece, frac: 0), exit = path.eval(piece: piece, frac: 1)
+        guard let height = threadLoop, path.pieceCount >= 2 else { return }
+        let tuck = path.pieceCount - 1
+        let under = path.pieceLength(tuck)
+        let entry = path.eval(piece: tuck, frac: 0), exit = path.eval(piece: tuck, frac: 1)
         let free = freeLength
-        let d = entry.t, z = V3(0, 0, 1)
-        let fade = min(1, leg / 1.5)
-        let front = zip(lay.sides, lay.depths).filter { $0.0 > 0 }.map(\.1).max() ?? 1
-        let step = max(0.2, (front + 1.5) * layer + 0.12 - entry.p.z) * fade
-        let ramp = max(0.8, 2 * step) * fade, drop = 0.8
-        let turn = 0.45 * fade, over = (step + 2 * turn) / 2
-        let bottom = Double.pi * turn, rise = drop * ramp + leg, top = Double.pi * over
-        let marks = [ramp, ramp + leg, ramp + leg + bottom, ramp + leg + bottom + rise, ramp + leg + bottom + rise + top]
+        let up = anchor.t, down = entry.t, z = V3(0, 0, 1)
+        // The turn has exactly the cloth of the finished top fold, so nothing
+        // shifts when the bight closes.
+        let radius = path.pieceLength(tuck - 1) / Double.pi
+        let bight = 2 * height + Double.pi * radius
+        let settle = min(3, height)
+
+        // Lay the bight out link by link so its length is exact, then ease the
+        // far leg onto the band's entry point.
+        let link = 0.25
+        var points: [V3] = [anchor.p], tangents: [V3] = [up], normals: [V3] = [anchor.n]
+        var q = 0.0
+        while q < bight {
+            let stepLength = min(link, bight - q)
+            let mid = q + stepLength / 2
+            var direction: V3, normal: V3
+            if mid < height {
+                direction = up; normal = -z
+            } else if mid < height + Double.pi * radius {
+                let angle = (mid - height) / radius
+                direction = up * cos(angle) + z * sin(angle)
+                normal = -z * cos(angle) + up * sin(angle)
+            } else {
+                direction = turn(-up, toward: down, by: smoothstep(bight - settle, bight, mid)); normal = z
+            }
+            normal = unit(normal - direction * simd_dot(normal, direction))
+            points.append(points[points.count - 1] + direction * stepLength)
+            tangents.append(direction); normals.append(normal)
+            q += stepLength
+        }
+        let miss = points[points.count - 1] - entry.p
+        for i in points.indices {
+            points[i] -= miss * smoothstep(0.35, 1, Double(i) / Double(max(points.count - 1, 1)))
+        }
+
         func frame(_ u: Double) -> (p: V3, t: V3, n: V3, near: Double, below: Double) {
-            if u < marks[0] {
-                let f = smoothstep(0, ramp, u)
-                let t = unit(d * drop + z * (step * 6 * f * (1 - f) / max(ramp, 1e-6)))
-                return (entry.p + d * (drop * u) + z * (step * f), t, unit(z - t * simd_dot(z, t)), u, -1)
+            if u < bight {
+                let position = u / link
+                let i = min(Int(position), points.count - 2), f = min(1, position - Double(i))
+                return (mix(points[i], points[i + 1], f), tangents[i + 1], normals[i + 1], min(u, bight - u), -1)
             }
-            let base = entry.p + d * (drop * ramp + leg)
-            if u < marks[1] { return (entry.p + d * (drop * ramp + u - ramp) + z * step, d, z, u, -1) }
-            if u < marks[2] {
-                let a = (u - marks[1]) / max(turn, 1e-6)
-                return (base + z * (step + turn) + d * (turn * sin(a)) - z * (turn * cos(a)), d * cos(a) + z * sin(a), z * cos(a) - d * sin(a), min(u, marks[4] - u), -1)
-            }
-            if u < marks[3] { return (base - d * (u - marks[2]) + z * (step + 2 * turn), -d, -z, min(u, marks[4] - u), -1) }
-            if u < marks[4] {
-                let a = (u - marks[3]) / max(over, 1e-6)
-                return (entry.p + z * over - d * (over * sin(a)) + z * (over * cos(a)), -d * cos(a) - z * sin(a), d * sin(a) - z * cos(a), marks[4] - u, -1)
-            }
-            let along = u - marks[4]
+            let along = u - bight
             if along <= under {
-                let f = path.eval(piece: piece, frac: along / max(under, 1e-6))
+                let f = path.eval(piece: tuck, frac: along / max(under, 1e-6))
                 return (f.p, f.t, f.n, 0, along)
             }
             return (exit.p + exit.t * (along - under) + z * (0.12 * smoothstep(0, 1, along - under)), exit.t, z, 0, along)

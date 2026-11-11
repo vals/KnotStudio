@@ -20,7 +20,7 @@ open build/KnotStudio.app
 
 - **Notation field** — any sequence of `Li Lo Ri Ro Ci Co`, optionally ending in `T`. Case, spaces and `⊗/⊙` are accepted. Text that is only partly valid still shows the knot up to the last valid move, with a note about what is wrong.
 - **Next move** — the six move buttons and `T`; only moves that can legally follow are enabled. Undo and Clear step back.
-- **Finishing** — `T` threads the wide end: it is lifted, its tip is fed under the front band and the cloth is drawn through. The knot then cinches into its dressed shape, rises to the collar, and the collar folds down. Lower Tightness to open it back up and see the structure.
+- **Finishing** — `T` threads the wide end: it stays up where it came through the neck loop, its tip is turned forward and fed down under the front band, and the cloth is drawn through. The knot then cinches into its dressed shape, rises to the collar, and the collar folds down. Lower Tightness to open it back up and see the structure.
 - **Keys** — `L` `R` `C` make the next move into that region (its direction is forced by the alternation rule; on the first move, Shift starts inside-out). `T` tucks, Delete undoes, ←/→ step, Space replays. Return or Escape leaves the notation field.
 - **Timeline** — one chip per move. Click a chip to show the knot as it stands after that move; `∅` is the untied tie. “Tie from the start” replays the whole sequence.
 - **Named knots** — the fourteen named Fink–Mao knots. Sequences outside the classical rules (other endings, first move to the right, more than nine moves) work too and are labelled off-catalogue.

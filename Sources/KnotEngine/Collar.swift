@@ -43,7 +43,9 @@ enum Collar {
                 }
             }
         }
-        let standLow = 1.7, standHigh = 1.9, inset = 0.3
+        // The stand sits well inside the tie's loop so thick cloth and its hems
+        // never reach it.
+        let standLow = 1.7, standHigh = 1.9, inset = 0.75
         func top(_ th: Double) -> V3 { neck.point(th, inset: inset) + V3(0, standHigh, 0) }
         grid(72, 2) { u, v in
             neck.point(u * 2 * Double.pi, inset: inset) + V3(0, mix(-standLow, standHigh, v), 0)
@@ -62,7 +64,7 @@ enum Collar {
                 // A soft roll at the fold line rather than a hard hinge.
                 // Folded, the leaf stands clear of the tie beneath it, and further
                 // clear toward the front where the tie comes forward to the knot.
-                let lift = (1.5 + 1.2 * (1 - smoothstep(0.25, 1.3, local))) * eased * smoothstep(0, 0.3, v)
+                let lift = (2.3 + 1.0 * (1 - smoothstep(0.25, 1.3, local))) * eased * smoothstep(0, 0.3, v)
                 return top(th) + direction * (height * v) + out * lift + V3(0, 0.25 * eased * sin(Double.pi * min(1, v * 4)) , 0)
             }
         }
