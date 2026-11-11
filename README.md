@@ -20,11 +20,12 @@ open build/KnotStudio.app
 
 - **Notation field** — any sequence of `Li Lo Ri Ro Ci Co`, optionally ending in `T`. Case, spaces and `⊗/⊙` are accepted. Text that is only partly valid still shows the knot up to the last valid move, with a note about what is wrong.
 - **Next move** — the six move buttons and `T`; only moves that can legally follow are enabled. Undo and Clear step back.
-- **Finishing** — when the tuck goes through, the knot cinches into its dressed shape; lower Tightness to open it back up and see the structure.
+- **Finishing** — `T` threads the wide end: it is lifted, its tip is fed under the front band and the cloth is drawn through. The knot then cinches into its dressed shape, rises to the collar, and the collar folds down. Lower Tightness to open it back up and see the structure.
+- **Keys** — `L` `R` `C` make the next move into that region (its direction is forced by the alternation rule; on the first move, Shift starts inside-out). `T` tucks, Delete undoes, ←/→ step, Space replays. Return or Escape leaves the notation field.
 - **Timeline** — one chip per move. Click a chip to show the knot as it stands after that move; `∅` is the untied tie. “Tie from the start” replays the whole sequence.
 - **Named knots** — the fourteen named Fink–Mao knots. Sequences outside the classical rules (other endings, first move to the right, more than nine moves) work too and are labelled off-catalogue.
-- **Fabric** — stripes, dots, windowpane, solid, or an imported swatch, with repeat width, offset and angle measured on the flat cloth.
-- **Look closer** — tightness, layer separation (pulls the stack apart to read the overlaps), tying speed, and two diagnostics: Grid (the cloth’s own coordinates) and Faces (teal = front of the fabric, rust = back).
+- **Fabric** — stripes, dots, windowpane, solid, or an imported swatch, with repeat width, offset and angle measured on the flat cloth. Cloth is fine silk, silk twill or wool: each has its own weave and sheen, and its thickness sets the bulk of the knot, so the same moves tie a bigger knot in wool. The back of the tie shows its lining, centre seam, keeper loop and label.
+- **Look closer** — a shirt collar (on by default), tightness, layer separation (pulls the stack apart to read the overlaps), tying speed, and two diagnostics: Grid (the cloth’s own coordinates) and Faces (teal = front of the fabric, rust = back).
 
 The view is the mirror view of the notation papers: narrow end on the left; a move is named for the region the wide end arrives in and where it points next (`i` into the shirt, so it was laid across the front; `o` out of the shirt, so it passed behind).
 
@@ -56,7 +57,7 @@ Checks the notation rules (including that they enumerate exactly the 85 Fink–M
 zsh Scripts/render.sh artifacts/windsor.png "Li Co Ri Lo Ci Ro Li Co T" view=knot
 ```
 
-Options: `steps=N`, `view=knot|portrait|side|back`, `display=fabric|grid|faces`, `tight=0…1`, `spread=`, `zoom=`, `size=`, and `from=<notation> animate=<seconds>` to catch a frame in mid-move.
+Options: `cloth=finesilk|silktwill|wool`, `collar=off`, `steps=N`, `view=knot|portrait|side|back`, `display=fabric|grid|faces`, `tight=0…1`, `spread=`, `zoom=`, `size=`, and `from=<notation> animate=<seconds>` to catch a frame in mid-move.
 
 ```sh
 build/KnotStudio.app/Contents/MacOS/KnotStudio --selftest "$PWD/artifacts/selftest"
@@ -67,6 +68,7 @@ Runs the real app through a short tying session, saves what the view shows at ea
 ## Known limits
 
 - Folds are sharp creases and panels are flat; the cushioning, taper and dimple are shaping applied afterwards. Real knots bunch and wrinkle.
-- While a move is in progress the wide end is led straight along its direction of travel and then released; it does not model a hand, and the tuck passes through the front band rather than being threaded.
+- While a move is in progress the wide end is led straight along its direction of travel and then released; it does not model a hand. The threaded tuck is a drawn path, not a simulation.
+- The collar is a plain shape with no shirt; while tying it stands up, which fills the background of the close view.
 - A finished knot is dressed by rule (folds drawn in, band raised to cover the top, taper from the knot’s bulk), not by solving for tension. From above it is an open cup.
-- No collar or shirt. Tuck variants beyond the final `T` (Eldredge, Trinity and similar) are not in the notation yet.
+- Only the classical final tuck is supported, by choice: knots that tuck under earlier bands are out of scope.

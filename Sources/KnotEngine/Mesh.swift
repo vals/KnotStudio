@@ -34,6 +34,10 @@ final class RibbonMesh {
     private(set) var normals: [Float] = []
     /// Material coordinates in cm: (across, along).
     private(set) var chart: [Float] = []
+    /// A second chart for the lining: (0.5 + across / 20 cm, along / tie length).
+    private(set) var liningChart: [Float] = []
+    /// Relative cloth thickness; sets how thick the rolled edges look.
+    var thickness = 1.0
     private(set) var front: [UInt32] = []
     private(set) var back: [UInt32] = []
     private(set) var rowCount = 0
@@ -47,7 +51,7 @@ final class RibbonMesh {
 
     private func fillProfile(_ row: Row) {
         let wv = max(row.wv, 0)
-        let rho = min(0.07, wv / 10)
+        let rho = min(0.07 * thickness, wv / 10)
         let hem = min(0.45, wv * 0.2)
         let half = wv / 2 + hem
         let wr = min(max(row.wr, 0), wv)
@@ -105,6 +109,7 @@ final class RibbonMesh {
         let sign: Double = shape.mirror ? -1 : 1
         grid.removeAll(keepingCapacity: true)
         chart.removeAll(keepingCapacity: true)
+        liningChart.removeAll(keepingCapacity: true)
         grid.reserveCapacity(n * cols)
         for row in rows {
             fillProfile(row)
@@ -115,6 +120,8 @@ final class RibbonMesh {
                 grid.append(p)
                 chart.append(Float(pt[k] * sign))
                 chart.append(Float(row.s + pa[k] * row.kappa))
+                liningChart.append(Float(0.5 + pt[k] * sign / 20))
+                liningChart.append(Float(row.s / TieBlank.length))
             }
         }
         let count = n * cols
@@ -135,6 +142,7 @@ final class RibbonMesh {
         positions.append(contentsOf: positions[0..<(count * 3)])
         for i in 0..<(count * 3) { normals.append(-normals[i]) }
         chart.append(contentsOf: chart[0..<(count * 2)])
+        liningChart.append(contentsOf: liningChart[0..<(count * 2)])
 
         front.removeAll(keepingCapacity: true)
         back.removeAll(keepingCapacity: true)

@@ -48,6 +48,14 @@ final class KnotSim {
     private var narrow = 38.0
     private var lead = 0.0
     private var dress = 0.0
+    private var weight = 1.0
+    /// Threading the tuck: length of the bight still hanging in front of the
+    /// band, or nil when the wide end is not being fed through.
+    private var threadLoop: Double?
+    private var snapTail = false
+    private(set) var neck = NeckRing()
+    /// 0 = collar standing up (while tying), 1 = folded down over the tie.
+    private(set) var collarFold = 0.0
     private var bandWidth = 3.9
     private var fixedLength = 47.0
     /// Current length of the narrow end below the knot, cm.
@@ -98,20 +106,21 @@ final class KnotSim {
         loose = mix(loose, 1 - min(1, max(0, params.tightness)), rate)
         spread = mix(spread, params.layerSpread, rate)
         let scale = 1 + 0.55 * loose
-        layer = (0.15 + 0.45 * loose) * spread
+        weight = mix(weight, min(2, max(0.5, params.weight)), rate)
+        layer = (0.15 * weight + 0.45 * loose) * spread
         // Dressing: once the tuck is through, the knot is drawn snug. Loosening
         // it with the tightness control opens it back up to show its structure.
         let through = shown.tuck && progress > Double(2 * shown.moves.count) + 0.9
         let dressGoal = through ? smoothstep(0.35, 0.75, 1 - loose) : 0.0
         dress = started ? mix(dress, dressGoal, 1 - exp(-dt / 0.30)) : (shown.tuck ? smoothstep(0.35, 0.75, 1 - loose) : 0)
-        let goalLayout = Layout.make(shown, scale: scale, dress: dress, bandWidth: bandWidth, layer: layer)
+        let goalLayout = Layout.make(shown, scale: scale, dress: dress, bandWidth: bandWidth, layer: layer, weight: weight)
         if started { lay.ease(toward: goalLayout, rate: rate) } else { lay = goalLayout }
         let crossGoal = shown.moves.isEmpty ? 0.0 : 1.0
         cross = started ? mix(cross, crossGoal, 1 - exp(-dt / 0.16)) : crossGoal
         path = WoundPath(layout: lay, layer: layer)
         var narrowGoal = params.narrowEnd
         if params.autoBalance {
-            let fullLayout = Layout.make(fullProgram ?? goal, scale: scale, dress: dress, bandWidth: bandWidth, layer: layer)
+            let fullLayout = Layout.make(fullProgram ?? goal, scale: scale, dress: dress, bandWidth: bandWidth, layer: layer, weight: weight)
             let wound = WoundPath(layout: fullLayout, layer: layer).length(upTo: fullLayout.restProgress)
             narrowGoal = (TieBlank.length - fixedLength - wound - 5) / 2
         }
@@ -119,7 +128,13 @@ final class KnotSim {
         narrow = mix(narrow, narrowGoal, rate)
         if !retracting { target = lay.restProgress }
         target = min(target, Double(path.pieceCount))
-        if started { advance(dt) } else { progress = target }
+        if started { advanceOrThread(dt) } else { progress = target; threadLoop = nil }
+        // Dressed, the knot is drawn up to the collar and the collar comes down.
+        neck.yFront = mix(3.6, 1.7, dress)
+        neck.zc = -neck.rz - 1.6
+        let foldGoal = dress > 0.6 ? 1.0 : 0.0
+        collarFold = started ? min(1, max(0, collarFold + (foldGoal > collarFold ? 1 : -1) * dt / 0.6)) : foldGoal
+        if abs(collarFold - foldGoal) < dt / 0.6 { collarFold = foldGoal }
         let leadGoal = abs(progress - target) > 1e-6 ? 1.0 : 0.0
         lead = started ? mix(lead, leadGoal, 1 - exp(-dt / (leadGoal > lead ? 0.12 : 0.28))) : 0
         let tuckGoal = shown.tuck && progress > Double(2 * shown.moves.count) + 0.5 ? 1.0 : 0.0
@@ -131,17 +146,20 @@ final class KnotSim {
         let previous = active
         active = max(0, Int(((TieBlank.length - anchorS - 0.02) / seg).rounded(.up)))
         active = min(active, tp.count)
-        if !started { resetTail() } else if active > previous {
+        if !started || snapTail { resetTail(); snapTail = false } else if active > previous {
             for i in previous..<active { tp[i] = anchor.p; tq[i] = anchor.p }
         }
-        stepTail(started ? dt : 0)
-        poseTail()
-        buildTail()
+        if threadLoop != nil { buildThread() } else {
+            stepTail(started ? dt : 0)
+            poseTail()
+            buildTail()
+        }
 
         shape.yCenter = (lay.yTop + lay.yBottom) / 2
         shape.radiusX = lay.halfWidth + 1.3
         shape.radiusY = (lay.yTop - lay.yBottom) / 2 + 0.9
-        shape.bulge = 1.25 * cross
+        shape.bulge = (1.0 + 0.25 * weight) * cross
+        mesh.thickness = weight
         shape.taperLeft = lay.taperLeft * cross
         shape.taperRight = lay.taperRight * cross
         shape.mirror = lay.mirrored
@@ -150,7 +168,8 @@ final class KnotSim {
         let easing = lay.distance(to: goalLayout) > 2e-3 || abs(cross - crossGoal) > 2e-3
             || abs(loose - (1 - params.tightness)) > 2e-3 || abs(spread - params.layerSpread) > 2e-3
             || abs(tuckAmount - tuckGoal) > 2e-3 || abs(narrow - narrowGoal) > 2e-3 || lead > 2e-3
-            || abs(dress - dressGoal) > 2e-3
+            || abs(dress - dressGoal) > 2e-3 || abs(weight - params.weight) > 2e-3
+            || threadLoop != nil || collarFold != foldGoal
         isMoving = !started || easing || abs(progress - target) > 1e-6 || shown != goal || tailSpeed > 0.6
         started = true
     }
@@ -162,7 +181,7 @@ final class KnotSim {
         let count = shown.moves.count
         if shown.tuck && !(goal.tuck && goal.moves == shown.moves) {
             target = Double(2 * count)
-            if progress > target + 1e-6 { return true }
+            if progress > target + 1e-6 || threadLoop != nil { return true }
             shown.tuck = false
         }
         var common = 0
@@ -177,7 +196,35 @@ final class KnotSim {
         return false
     }
 
-    private func advance(_ dt: Double) {
+    /// Moves along the wound path, except for the tuck: that last chord is not
+    /// laid down from the top. The wide end is lifted, its tip is fed under the
+    /// band, and the cloth is drawn through until the bight in front is gone.
+    private func advanceOrThread(_ dt: Double) {
+        let folded = Double(2 * shown.moves.count)
+        guard shown.tuck, path.pieceCount == 2 * shown.moves.count + 1 else {
+            threadLoop = nil
+            advance(dt, to: target)
+            return
+        }
+        let free = freeLength
+        let speed = 22 * params.speed
+        if target > folded {
+            if progress < folded - 1e-9 { advance(dt, to: folded); return }
+            if progress >= folded + 1 - 1e-9 { return }
+            progress = folded
+            let loop = (threadLoop ?? free) - speed * dt
+            if loop <= 0 { threadLoop = nil; progress = folded + 1; snapTail = true } else { threadLoop = loop }
+        } else if progress > folded + 1e-9 || threadLoop != nil {
+            progress = folded
+            let loop = (threadLoop ?? 0) + speed * dt
+            threadLoop = loop >= free ? nil : loop
+            if threadLoop == nil { snapTail = true }
+        } else {
+            advance(dt, to: target)
+        }
+    }
+
+    private func advance(_ dt: Double, to target: Double) {
         guard path.pieceCount > 0 else { progress = 0; return }
         var time = dt
         var guardCount = 0
@@ -213,8 +260,8 @@ final class KnotSim {
         let xh = -xs * (1 - g)
         let z0 = lay.sides.isEmpty ? layer : lay.sides[0] * (lay.depths[0] + 0.5) * layer
         let flip: Double = lay.insideOut ? -1 : 1
-        let rx = 6.0, rz = 6.4, zc = -rz - 0.6, yf = 3.6, rise = 3.2, th0 = 0.75
-        func ring(_ th: Double) -> V3 { V3(-rx * sin(th), yf + rise * (1 - cos(th)) / 2, zc + rz * cos(th)) }
+        let zc = neck.zc, th0 = 0.75
+        func ring(_ th: Double) -> V3 { neck.point(th) }
 
         var ctrl: [V3] = [V3(xh, yb - 6, 0), V3(xh, yb - 1.2, 0), V3(mix(-xs, -0.18 * sc, g), -1.2 * sc, 0), V3(-xs, ys, 0)]
         let twoPi = 2 * Double.pi
@@ -317,7 +364,7 @@ final class KnotSim {
         anchorS = min(s0 + before, TieBlank.length)
         let wv = TieBlank.width(anchorS), wr = min(wv, anchor.cap)
         rows.append(Row(c: anchor.p, t: anchor.t, a: anchor.a, n: anchor.n, kappa: anchor.kappa, s: anchorS, wv: wv, wr: wr, chord: wr, dimple: 0.3 * tuckAmount))
-        shirtZ = -((lay.depths.max() ?? 1) + 1.5) * layer - 0.4
+        shirtZ = min(-((lay.depths.max() ?? 1) + 1.5) * layer - 0.4, neck.frontZ + 0.2)
         if let band = lay.bandChord, band < path.chords.count {
             let middle = s0 + path.length(upTo: Double(2 * band) + 0.5)
             bandWidth = min(TieBlank.width(middle), (path.chords[band].cap0 + path.chords[band].cap1) / 2)
@@ -430,6 +477,7 @@ final class KnotSim {
             pose[i] = previous + direction * (i == last ? first : seg)
             let depth = simd_dot(planeNormal, pose[i] - anchor.p) - 0.12
             if depth < 0 { pose[i] -= planeNormal * depth }
+            if pose[i].z < shirtZ { pose[i].z = shirtZ }
             previous = pose[i]
         }
     }
@@ -445,6 +493,79 @@ final class KnotSim {
         }
         let angle = acos(c), sine = sin(angle)
         return unit(a * (sin((1 - w) * angle) / sine) + b * (sin(w * angle) / sine))
+    }
+
+    /// The free end while it is being threaded, as one continuous strip: down
+    /// the front of the band, up again in a bight, over into the top of the
+    /// band, under it, and out below. `threadLoop` is the length of the front
+    /// leg; as it shrinks the tip climbs, dives under the band and the cloth
+    /// follows until none is left in front.
+    private func buildThread() {
+        guard let leg = threadLoop, path.pieceCount > 0 else { return }
+        let piece = path.pieceCount - 1
+        let under = path.pieceLength(piece)
+        let entry = path.eval(piece: piece, frac: 0), exit = path.eval(piece: piece, frac: 1)
+        let free = freeLength
+        let d = entry.t, z = V3(0, 0, 1)
+        let fade = min(1, leg / 1.5)
+        let front = zip(lay.sides, lay.depths).filter { $0.0 > 0 }.map(\.1).max() ?? 1
+        let step = max(0.2, (front + 1.5) * layer + 0.12 - entry.p.z) * fade
+        let ramp = max(0.8, 2 * step) * fade, drop = 0.8
+        let turn = 0.45 * fade, over = (step + 2 * turn) / 2
+        let bottom = Double.pi * turn, rise = drop * ramp + leg, top = Double.pi * over
+        let marks = [ramp, ramp + leg, ramp + leg + bottom, ramp + leg + bottom + rise, ramp + leg + bottom + rise + top]
+        func frame(_ u: Double) -> (p: V3, t: V3, n: V3, near: Double, below: Double) {
+            if u < marks[0] {
+                let f = smoothstep(0, ramp, u)
+                let t = unit(d * drop + z * (step * 6 * f * (1 - f) / max(ramp, 1e-6)))
+                return (entry.p + d * (drop * u) + z * (step * f), t, unit(z - t * simd_dot(z, t)), u, -1)
+            }
+            let base = entry.p + d * (drop * ramp + leg)
+            if u < marks[1] { return (entry.p + d * (drop * ramp + u - ramp) + z * step, d, z, u, -1) }
+            if u < marks[2] {
+                let a = (u - marks[1]) / max(turn, 1e-6)
+                return (base + z * (step + turn) + d * (turn * sin(a)) - z * (turn * cos(a)), d * cos(a) + z * sin(a), z * cos(a) - d * sin(a), min(u, marks[4] - u), -1)
+            }
+            if u < marks[3] { return (base - d * (u - marks[2]) + z * (step + 2 * turn), -d, -z, min(u, marks[4] - u), -1) }
+            if u < marks[4] {
+                let a = (u - marks[3]) / max(over, 1e-6)
+                return (entry.p + z * over - d * (over * sin(a)) + z * (over * cos(a)), -d * cos(a) - z * sin(a), d * sin(a) - z * cos(a), marks[4] - u, -1)
+            }
+            let along = u - marks[4]
+            if along <= under {
+                let f = path.eval(piece: piece, frac: along / max(under, 1e-6))
+                return (f.p, f.t, f.n, 0, along)
+            }
+            return (exit.p + exit.t * (along - under) + z * (0.12 * smoothstep(0, 1, along - under)), exit.t, z, 0, along)
+        }
+        wideTipY = anchor.p.y
+        var u = 0.3
+        while true {
+            let at = min(u, free)
+            let f = frame(at)
+            let s = anchorS + at
+            let wv = TieBlank.width(s)
+            var wr = wv, chord = wv
+            if f.below < 0 {
+                wr = min(wv, mix(2.5, wv, smoothstep(0, 3.5, f.near)))
+                chord = min(wr, mix(2.5, wv, smoothstep(-2, 9, f.near)))
+            } else if f.below <= under {
+                wr = min(wv, mix(2.5, 3.2, f.below / max(under, 1e-6))); chord = wr
+            } else {
+                wr = min(wv, mix(3.2, wv, smoothstep(0, 3.5, f.below - under)))
+                chord = min(wr, mix(3.2, wv, smoothstep(-2, 9, f.below - under)))
+            }
+            rows.append(Row(c: f.p, t: f.t, a: simd_cross(f.t, f.n), n: f.n, kappa: 0, s: s, wv: wv, wr: wr, chord: chord, dimple: 0))
+            wideTipY = min(wideTipY, f.p.y)
+            if at >= free { break }
+            u += 0.35
+        }
+        // Keep the hidden chain on the same shape so nothing jumps afterwards.
+        for i in 0..<active {
+            let p = frame(min(free, max(0, TieBlank.length - Double(i) * seg - anchorS))).p
+            tp[i] = p; tq[i] = p; pose[i] = p
+        }
+        tailSpeed = 0
     }
 
     private func buildTail() {

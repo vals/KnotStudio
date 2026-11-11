@@ -13,7 +13,14 @@ final class StudioModel: ObservableObject {
     @Published private(set) var program: KnotProgram
     @Published private(set) var step: Int
     @Published private(set) var issue: String?
-    @Published var fabric = FabricSettings() { didSet { controller.apply(fabric: fabric) } }
+    @Published var fabric = FabricSettings() {
+        didSet {
+            controller.apply(fabric: fabric)
+            // The cloth's thickness is what makes its knots bulkier or slimmer.
+            if params.weight != fabric.cloth.weight { params.weight = fabric.cloth.weight }
+        }
+    }
+    @Published var showCollar = true { didSet { controller.showCollar = showCollar; wake() } }
     @Published var params = KnotParams() { didSet { controller.set(params: params); wake() } }
     @Published var camera: CameraPreset = .knot { didSet { placeCamera() } }
     @Published private(set) var stats = SimStats()
@@ -35,6 +42,49 @@ final class StudioModel: ObservableObject {
         controller.onStats = { [weak self] stats in self?.stats = stats }
         controller.onActivity = { [weak self] moving in self?.activity(moving) }
         StudioModel.current = self
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            nonisolated(unsafe) let event = event
+            return MainActor.assumeIsolated { self.intercept(event) }
+        }
+    }
+
+    // MARK: Keyboard
+
+    private var keyMonitor: Any?
+
+    /// Keys act on the knot unless the notation field is being edited; Return
+    /// or Escape leaves the field.
+    private func intercept(_ event: NSEvent) -> NSEvent? {
+        if let editor = event.window?.firstResponder as? NSText, editor.isEditable {
+            if event.keyCode == 36 || event.keyCode == 53 { event.window?.makeFirstResponder(nil); return nil }
+            return event
+        }
+        return handleKey(event) ? nil : event
+    }
+
+    /// L, R, C make the next move into that region. Its direction is forced by
+    /// the alternation rule, so only the first move has a choice: Shift starts
+    /// inside-out (Lo/Ro). T tucks, Delete undoes, the arrows step, Space plays.
+    func handleKey(_ event: NSEvent) -> Bool {
+        if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty { return false }
+        switch event.keyCode {
+        case 51, 117: undo(); return true
+        case 123: show(step: step - 1); return true
+        case 124: show(step: step + 1); return true
+        case 49: playing ? stop() : play(); return true
+        default: break
+        }
+        guard let key = event.charactersIgnoringModifiers?.lowercased().first else { return false }
+        if key == "t" {
+            if canTuck { tuck() } else { NSSound.beep() }
+            return true
+        }
+        guard let region = Region(rawValue: String(key).uppercased()) else { return false }
+        let inward = shownProgram.moves.last.map { !$0.inward } ?? !event.modifierFlags.contains(.shift)
+        let move = Move(region: region, inward: inward)
+        if objection(to: move) == nil { add(move) } else { NSSound.beep() }
+        return true
     }
 
     /// Snapshot of the live view, exactly as displayed.
@@ -123,12 +173,14 @@ final class StudioModel: ObservableObject {
     func attach(_ view: SCNView) {
         self.view = view
         placeCamera()
+        // Start with the keys going to the knot, not the notation field.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { view.window?.makeFirstResponder(nil) }
     }
 
     /// The simulation is stepped from the view's render callback, so the view
     /// must redraw continuously while anything moves and may rest otherwise.
-    private func wake() { view?.rendersContinuously = true; view?.isPlaying = true }
-    private func rest() { view?.rendersContinuously = false; view?.isPlaying = false }
+    private func wake() { view?.rendersContinuously = true }
+    private func rest() { view?.rendersContinuously = false }
     var isRendering: Bool { view?.rendersContinuously ?? false }
     var windowVisible: Bool { view?.window?.occlusionState.contains(.visible) ?? false }
 

@@ -136,6 +136,51 @@ struct Checks {
         }
         print("geometry: \(states) knot states checked; worst centreline stretch \(String(format: "%.2f%%", worstStretch * 100)), worst fold error \(String(format: "%.4f", worstFold))")
 
+        // Cloth weight: thicker cloth ties a bulkier knot, and still a sound one.
+        for knot in NamedKnot.catalog {
+            var widths: [Double] = []
+            for weight in [0.75, 1.45] {
+                let heavy = KnotSim()
+                heavy.params.weight = weight
+                heavy.goal = knot.program
+                heavy.settle(seconds: 0.5)
+                widths.append(heavy.layout.halfWidth)
+                expect(!heavy.mesh.positions.contains { !$0.isFinite }, "\(knot.name) at weight \(weight): non-finite geometry")
+                expect(heavy.freeLength > 8, "\(knot.name) at weight \(weight): the wide end ran out")
+                let path = heavy.woundPath
+                for j in 0..<max(0, path.chords.count - 1) {
+                    let roll = path.rolls[j], tin = path.chords[j].dir
+                    let mirrored = roll.e * (2 * simd_dot(tin, roll.e)) - tin
+                    expect(simd_distance(mirrored, path.chords[j + 1].dir) < 0.02, "\(knot.name) at weight \(weight): fold \(j) is not a reflection")
+                }
+            }
+            expect(widths[1] > widths[0] + 0.1, "\(knot.name): wool should tie a wider knot than fine silk")
+        }
+
+        // The tuck is threaded: partway through, the wide end forms a bight in
+        // front of the band, and it ends hanging below the knot.
+        let threader = KnotSim()
+        threader.goal = KnotProgram("Li Ro Li Co")
+        threader.settle()
+        threader.goal = KnotProgram("Li Ro Li Co T")
+        var sawBight = false, time = 0.0
+        while time < 8 && (threader.isMoving || time < 0.2) {
+            threader.step(1.0 / 60); time += 1.0 / 60
+            let free = threader.rows.filter { $0.s > threader.anchorS }
+            // A bight: cloth heading back up, patterned face turned away.
+            let bight = free.contains { $0.t.y > 0.9 && $0.n.z < -0.9 }
+            if bight { sawBight = true }
+            for i in 1..<max(free.count, 1) where bight && free[i].s - free[i - 1].s > 0.2 {
+                let stretch = simd_distance(free[i].c, free[i - 1].c) / (free[i].s - free[i - 1].s)
+                // Only stretching is an error; rows closer than their cloth just
+                // straddle a turn of the bight.
+                expect(stretch < 1.15, "threading: free end stretched by \(stretch)")
+            }
+        }
+        expect(sawBight, "threading the tuck should pass through a bight in front of the band")
+        expect(!threader.isMoving && threader.shown.tuck, "threading should finish and come to rest")
+        expect(threader.collarFold == 1, "the collar should be down once the knot is dressed")
+
         // 3. Live tying: each added or removed move plays out and comes to rest.
         let stepper = KnotSim()
         stepper.settle()

@@ -13,6 +13,10 @@ struct KnotParams: Equatable {
     var narrowEnd = 38.0
     /// Tying speed multiplier.
     var speed = 1.0
+    /// Thickness of the cloth relative to an ordinary silk twill (1). Thicker
+    /// cloth makes every layer, fold and wrap bulkier, so the same sequence
+    /// ties a bigger knot.
+    var weight = 1.0
 }
 
 /// The knot reduced to what the notation actually specifies: a ribbon wound
@@ -63,7 +67,7 @@ struct Layout {
     ///   - bandWidth: visible width of the front band, cm.
     ///   - layer: spacing between layers, cm (for the size of the top roll).
     static func make(_ program: KnotProgram, scale sc: Double, dress: Double = 0,
-                     bandWidth: Double = 3.9, layer: Double = 0.15) -> Layout {
+                     bandWidth: Double = 3.9, layer: Double = 0.15, weight: Double = 1) -> Layout {
         var lay = Layout()
         lay.mirrored = program.moves.first?.region == .R
         lay.insideOut = program.moves.first.map { !$0.inward } ?? false
@@ -72,7 +76,7 @@ struct Layout {
             ? program.moves.map { Move(region: $0.region.mirrored, inward: $0.inward) }
             : program.moves
         let centers = moves.filter { $0.region == .C }.count
-        lay.strandX = (1.15 + 0.10 * Double(min(centers, 3))) * sc
+        lay.strandX = (0.95 + 0.20 * weight + 0.10 * weight * Double(min(centers, 3))) * sc
         lay.strandY = 0.35 * sc
         lay.points = [V2(lay.strandX, lay.strandY)]
         lay.caps = [2.1]
@@ -93,20 +97,20 @@ struct Layout {
         if let band {
             let last = Double(max(centers - 1, 0))
             let roll = min(0.5 * layer * (lay.depths[band] + (lay.depths.last ?? 1) + 2), WoundPath.foldBulge * layer)
-            let cover = (0.28 + 0.15 * last) * sc + roll + 0.22
+            let cover = (0.28 + 0.15 * weight * last) * sc + roll + 0.22
             // Never above the crossing, or the band would wrap the neck strands.
             bandY = min(-1.02, max(-1.52, (cover - bandWidth / 2) / sc))
         }
 
         var visitsL = 0, visitsR = 0, visitsC = 0
-        var lowest = 0.0, widest = 1.45, highest = 0.35
+        var lowest = 0.0, widest = moves.isEmpty ? 1.45 : 0.0, highest = 0.35
         for (index, move) in moves.enumerated() {
             let onBand = band.map { index == $0 || index == $0 - 1 } ?? false
             switch move.region {
             case .L, .R:
                 let left = move.region == .L
                 let visit = Double(left ? visitsL : visitsR)
-                let x = 1.45 + 0.26 * visit
+                let x = 1.25 + (0.20 + 0.26 * visit) * weight
                 let open = (left ? -1.52 : -1.58) - 0.12 * visit
                 // Dressed, the inner wraps are drawn up level with the band and
                 // gathered so that they hide behind it.
@@ -119,7 +123,7 @@ struct Layout {
                 if left { visitsL += 1 } else { visitsR += 1 }
             case .C:
                 let visit = Double(visitsC)
-                let y = mix(0.50 + 0.20 * visit, 0.28 + 0.15 * visit, dressed)
+                let y = mix(0.50 + 0.20 * weight * visit, 0.28 + 0.15 * weight * visit, dressed)
                 lay.points.append(V2(0, y) * sc)
                 lay.caps.append(2.5)
                 highest = max(highest, y)

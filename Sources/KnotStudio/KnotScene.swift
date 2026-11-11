@@ -27,6 +27,11 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
     private let frontMaterial = SCNMaterial()
     private let backMaterial = SCNMaterial()
     private var textureKey = ""
+    private var lined = true
+    private let collarNode = SCNNode()
+    private let collarMaterial = SCNMaterial()
+    private var collarKey = ""
+    private var collarPositions: [Float] = [], collarNormals: [Float] = [], collarIndices: [UInt32] = []
 
     private let lock = NSLock()
     private var pendingGoal: KnotProgram?
@@ -43,6 +48,8 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
     private(set) var liveMillisTotal = 0.0
     private(set) var liveMillisWorst = 0.0
     private(set) var liveSeconds = 0.0
+    private(set) var liveRepeats = 0
+    private(set) var liveFast = 0
     private var statsTick = 0
     var onStats: ((SimStats) -> Void)?
     /// Called on the main thread when the model starts or stops moving.
@@ -55,6 +62,13 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         scene.background.contents = Self.background
         ribbon.name = "tie"
         scene.rootNode.addChildNode(ribbon)
+        collarNode.name = "collar"
+        scene.rootNode.addChildNode(collarNode)
+        collarMaterial.lightingModel = .physicallyBased
+        collarMaterial.diffuse.contents = NSColor(srgbRed: 0.90, green: 0.91, blue: 0.93, alpha: 1)
+        collarMaterial.roughness.contents = 0.9
+        collarMaterial.metalness.contents = 0.0
+        collarMaterial.isDoubleSided = true
 
         for material in [frontMaterial, backMaterial] {
             material.lightingModel = .physicallyBased
@@ -113,12 +127,31 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         if fabric.textureKey != textureKey {
             textureKey = fabric.textureKey
             frontMaterial.diffuse.contents = FabricTexture.make(fabric)
-            backMaterial.diffuse.contents = FabricTexture.make(fabric, back: true)
+            // The back shows the tie's lining, mapped along its whole length;
+            // the diagnostic displays use the same chart on both faces.
+            lined = fabric.display == .fabric
+            backMaterial.diffuse.contents = lined ? FabricTexture.lining(fabric) : FabricTexture.make(fabric, back: true)
+            backMaterial.diffuse.mappingChannel = lined ? 1 : 0
+            backMaterial.diffuse.wrapS = lined ? .clamp : .repeat
+            backMaterial.diffuse.wrapT = lined ? .clamp : .repeat
+            let weave = FabricTexture.weaveNormal(fabric.cloth)
+            let tile = CGFloat(1 / fabric.cloth.weaveTile)
+            for material in [frontMaterial, backMaterial] {
+                material.normal.contents = fabric.display == .fabric ? weave : nil
+                material.normal.wrapS = .repeat; material.normal.wrapT = .repeat
+                material.normal.mipFilter = .linear
+                material.normal.maxAnisotropy = 8
+                material.normal.intensity = 1
+                material.normal.contentsTransform = SCNMatrix4MakeScale(tile, tile, 1)
+                material.roughness.contents = fabric.display == .fabric ? fabric.cloth.roughness : 0.8
+            }
         }
         let transform = fabric.chartTransform
         frontMaterial.diffuse.contentsTransform = transform
-        backMaterial.diffuse.contentsTransform = transform
+        backMaterial.diffuse.contentsTransform = lined ? SCNMatrix4Identity : transform
     }
+
+    var showCollar = true { didSet { collarNode.isHidden = !showCollar } }
 
     func place(_ preset: CameraPreset) {
         lock.lock(); let (yc, wideTipY, narrowTipY) = extents; lock.unlock()
@@ -163,6 +196,7 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         sim.step(dt)
         let millis = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
         ribbon.geometry = makeGeometry()
+        refreshCollar()
         publishExtents()
         return millis
     }
@@ -172,6 +206,7 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         takeMail()
         sim.settle(seconds: seconds)
         ribbon.geometry = makeGeometry()
+        refreshCollar()
         publishExtents()
     }
 
@@ -180,6 +215,8 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
     /// One frame of the live loop. SceneKit calls this before each redraw.
     func tick(_ time: TimeInterval) {
         let dt = lastTime.map { min(max(time - $0, 0), 0.1) } ?? 1.0 / 60
+        if dt < 1e-4 { liveRepeats += 1 }
+        if dt > 0.001 && dt < 0.0065 { liveFast += 1 }
         lastTime = time
         lock.lock(); let mail = pendingGoal != nil || pendingParams != nil; lock.unlock()
         if !sim.isMoving && !mail {
@@ -223,6 +260,8 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
                               componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
             SCNGeometrySource(data: data(mesh.chart), semantic: .texcoord, vectorCount: count, usesFloatComponents: true,
                               componentsPerVector: 2, bytesPerComponent: 4, dataOffset: 0, dataStride: 8),
+            SCNGeometrySource(data: data(mesh.liningChart), semantic: .texcoord, vectorCount: count, usesFloatComponents: true,
+                              componentsPerVector: 2, bytesPerComponent: 4, dataOffset: 0, dataStride: 8),
         ]
         let elements = [mesh.front, mesh.back].map {
             SCNGeometryElement(data: data($0), primitiveType: .triangles, primitiveCount: $0.count / 3, bytesPerIndex: 4)
@@ -230,6 +269,24 @@ final class KnotSceneController: NSObject, SCNSceneRendererDelegate {
         let geometry = SCNGeometry(sources: sources, elements: elements)
         geometry.materials = [frontMaterial, backMaterial]
         return geometry
+    }
+
+    /// The collar only changes while the knot is being dressed or undressed.
+    private func refreshCollar() {
+        let key = String(format: "%.3f|%.3f|%.3f", sim.neck.yFront, sim.neck.zc, sim.collarFold)
+        guard key != collarKey else { return }
+        collarKey = key
+        Collar.build(neck: sim.neck, fold: sim.collarFold, positions: &collarPositions, normals: &collarNormals, indices: &collarIndices)
+        func data<T>(_ array: [T]) -> Data { array.withUnsafeBufferPointer { Data(buffer: $0) } }
+        let count = collarPositions.count / 3
+        let geometry = SCNGeometry(sources: [
+            SCNGeometrySource(data: data(collarPositions), semantic: .vertex, vectorCount: count, usesFloatComponents: true,
+                              componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
+            SCNGeometrySource(data: data(collarNormals), semantic: .normal, vectorCount: count, usesFloatComponents: true,
+                              componentsPerVector: 3, bytesPerComponent: 4, dataOffset: 0, dataStride: 12),
+        ], elements: [SCNGeometryElement(data: data(collarIndices), primitiveType: .triangles, primitiveCount: collarIndices.count / 3, bytesPerIndex: 4)])
+        geometry.materials = [collarMaterial]
+        collarNode.geometry = geometry
     }
 
     // MARK: Snapshots
