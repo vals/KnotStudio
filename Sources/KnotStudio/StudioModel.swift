@@ -25,6 +25,8 @@ final class StudioModel: ObservableObject {
     @Published var camera: CameraPreset = .knot { didSet { placeCamera() } }
     @Published private(set) var stats = SimStats()
     @Published private(set) var playing = false
+    private var playbackGeneration = 0
+    private var advancementPending = false
     @Published var imageName = ""
     @Published var fileError = ""
 
@@ -114,8 +116,8 @@ final class StudioModel: ObservableObject {
         text = newText
         let parsed = KnotProgram.parse(newText)
         issue = parsed.issue
+        stop()
         guard parsed.program != program else { return }
-        playing = false
         program = parsed.program
         step = program.stepCount
         push()
@@ -146,7 +148,7 @@ final class StudioModel: ObservableObject {
     func clear() { replace(with: KnotProgram()) }
 
     private func replace(with next: KnotProgram) {
-        playing = false
+        stop()
         program = next
         step = next.stepCount
         text = next.notation
@@ -155,7 +157,7 @@ final class StudioModel: ObservableObject {
     }
 
     func show(step newStep: Int) {
-        playing = false
+        stop()
         step = max(0, min(newStep, program.stepCount))
         push()
     }
@@ -163,12 +165,22 @@ final class StudioModel: ObservableObject {
     /// Untie, then tie the whole program one step at a time.
     func play() {
         guard program.stepCount > 0 else { return }
+        stop()
         step = 0
-        push()
         playing = true
+        push()
     }
 
-    func stop() { playing = false }
+    func stop() {
+        playing = false
+        invalidateAdvancement()
+        if controller.isIdle { rest() }
+    }
+
+    private func invalidateAdvancement() {
+        playbackGeneration &+= 1
+        advancementPending = false
+    }
 
     private func push() {
         controller.set(goal: shownProgram, full: program)
@@ -192,16 +204,23 @@ final class StudioModel: ObservableObject {
     var windowVisible: Bool { view?.window?.occlusionState.contains(.visible) ?? false }
 
     private func activity(_ moving: Bool) {
-        if moving { return }
+        if moving {
+            // New motion invalidates a pause queued for the previous rest state.
+            if advancementPending { invalidateAdvancement() }
+            return
+        }
         if playing {
-            if step < program.stepCount {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    guard let self, self.playing else { return }
-                    self.step += 1
-                    self.push()
-                    if self.step >= self.program.stepCount { self.playing = false }
-                }
-            } else { playing = false }
+            guard step < program.stepCount else { stop(); return }
+            guard !advancementPending else { return }
+            advancementPending = true
+            let generation = playbackGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self, self.playing, self.playbackGeneration == generation else { return }
+                self.advancementPending = false
+                self.step += 1
+                self.push()
+                if self.step >= self.program.stepCount { self.stop() }
+            }
             return
         }
         // Nothing left to animate: let the view stop redrawing.

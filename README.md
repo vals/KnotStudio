@@ -71,6 +71,14 @@ It shows structure, overlap and pattern. It does not predict how a particular cl
 zsh Scripts/test.sh
 ```
 
+For replay controls and interruption regressions (no app window required):
+
+```sh
+zsh Scripts/test-playback.sh
+```
+
+Checks replay completion, repeated rest notifications, stop/restart, scrubbing, edits, clearing, resumed motion and renderer sleep/wake behavior.
+
 Checks the notation rules (including that they enumerate exactly the 85 Fink–Mao knots), then builds every one of those knots at every step of tying — 854 states — and verifies that each move crosses the strand the notation says it crosses and on the right side, that layers stack in order, that the tuck sits under its band, that folds are true reflections and that the cloth is not stretched. It also ties and unties a Windsor live and times the step.
 
 ```sh
