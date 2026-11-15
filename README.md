@@ -62,6 +62,7 @@ It shows structure, overlap and pattern. It does not predict how a particular cl
 | `Sources/KnotEngine` | Notation, layout, folded path, free-end chain, mesh. Foundation + simd only. |
 | `Sources/KnotStudio` | The app: SceneKit scene, fabric textures, SwiftUI interface. |
 | `Tests/Checks.swift` | Engine checks (see below). |
+| `Tools/Icon.swift`, `Resources/AppIcon.icns` | The app icon: drawn in code, packed by `Scripts/icon.sh`, copied into the app by `Scripts/build.sh`. |
 | `Tools/Render.swift`, `Tools/contact_sheet.py` | Offscreen renders for looking at the model without opening the app. |
 | `Legacy/` | The 0.8 preset studio and cloth lab, with their own scripts, tests and deliverables. |
 

@@ -19,9 +19,11 @@ cat > build/KnotStudio.app/Contents/Info.plist <<'PLIST'
 <key>CFBundleShortVersionString</key><string>1.0</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+cp Resources/AppIcon.icns build/KnotStudio.app/Contents/Resources/AppIcon.icns
 # Ad-hoc sign in a private temporary folder: the file provider that syncs
 # Documents adds Finder metadata to app folders, which codesign rejects.
 STAGING_DIR="$(mktemp -d /tmp/knotstudio-sign.XXXXXX)"
@@ -30,4 +32,7 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 /usr/bin/codesign --force --sign - "$STAGING_DIR/KnotStudio.app"
 /usr/bin/ditto --norsrc --noextattr "$STAGING_DIR/KnotStudio.app" build/KnotStudio.app
 /usr/bin/xattr -dr com.apple.FinderInfo build/KnotStudio.app 2>/dev/null || true
+# Re-register so Finder, the Dock and the app switcher pick up a changed icon.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f build/KnotStudio.app 2>/dev/null || true
+touch build/KnotStudio.app
 print 'Built build/KnotStudio.app'
